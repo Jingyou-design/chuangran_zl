@@ -1,0 +1,6 @@
+Code: B01B
+Level: subclass
+Section: 分离；混合
+Title: 沸腾；沸腾装置 沸腾; 用于物理或化学用途的沸腾装置
+========================================
+(no additional notes)

@@ -1,0 +1,6 @@
+Code: G08
+Level: class
+Section: 仪器
+Title: 信号装置
+========================================
+(no additional notes)

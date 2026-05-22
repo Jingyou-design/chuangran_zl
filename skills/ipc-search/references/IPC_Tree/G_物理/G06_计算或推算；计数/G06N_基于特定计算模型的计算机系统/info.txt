@@ -1,0 +1,6 @@
+Code: G06N
+Level: subclass
+Section: 仪器
+Title: 基于特定计算模型的计算机系统
+========================================
+(no additional notes)

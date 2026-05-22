@@ -1,0 +1,6 @@
+Code: B32
+Level: class
+Section: 分离；混合
+Title: 层状产品
+========================================
+(no additional notes)

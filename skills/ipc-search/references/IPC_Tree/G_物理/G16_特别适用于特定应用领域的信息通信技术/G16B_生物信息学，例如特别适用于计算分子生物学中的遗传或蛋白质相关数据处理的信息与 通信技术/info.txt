@@ -1,0 +1,6 @@
+Code: G16B
+Level: subclass
+Section: 仪器
+Title: 生物信息学，例如特别适用于计算分子生物学中的遗传或蛋白质相关数据处理的信息与 通信技术
+========================================
+(no additional notes)

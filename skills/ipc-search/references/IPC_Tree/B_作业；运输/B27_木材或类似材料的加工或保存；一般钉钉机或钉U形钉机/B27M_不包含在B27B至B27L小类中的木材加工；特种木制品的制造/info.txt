@@ -1,0 +1,6 @@
+Code: B27M
+Level: subclass
+Section: 分离；混合
+Title: 不包含在B27B至B27L小类中的木材加工；特种木制品的制造
+========================================
+(no additional notes)

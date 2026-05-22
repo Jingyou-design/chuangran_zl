@@ -1,0 +1,6 @@
+Code: G21D
+Level: subclass
+Section: 仪器
+Title: 核发电厂
+========================================
+(no additional notes)

@@ -1,0 +1,6 @@
+Code: B61J
+Level: subclass
+Section: 分离；混合
+Title: 铁路车辆的移位或调车（一般车辆移位入B60S；编组系统入B61B）
+========================================
+(no additional notes)

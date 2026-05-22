@@ -1,0 +1,6 @@
+Code: B22
+Level: class
+Section: 分离；混合
+Title: 铸造；粉末冶金
+========================================
+(no additional notes)

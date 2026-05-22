@@ -1,0 +1,6 @@
+Code: G07G
+Level: subclass
+Section: 仪器
+Title: 登记收到的现金、贵重物或辅币 收银机
+========================================
+(no additional notes)

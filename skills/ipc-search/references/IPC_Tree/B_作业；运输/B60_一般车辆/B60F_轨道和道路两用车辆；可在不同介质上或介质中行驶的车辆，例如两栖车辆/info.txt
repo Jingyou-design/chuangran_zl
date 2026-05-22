@@ -1,0 +1,6 @@
+Code: B60F
+Level: subclass
+Section: 分离；混合
+Title: 轨道和道路两用车辆；可在不同介质上或介质中行驶的车辆，例如两栖车辆（气垫 车入B60V）
+========================================
+(no additional notes)

@@ -1,0 +1,6 @@
+Code: B05
+Level: class
+Section: 分离；混合
+Title: 一般喷射或雾化；对表面涂覆流体的一般方法
+========================================
+(no additional notes)

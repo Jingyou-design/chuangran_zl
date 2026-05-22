@@ -1,0 +1,6 @@
+Code: G16Z
+Level: subclass
+Section: 仪器
+Title: 未列入其他类目的特别适用于特定应用领域的信息和通信技术
+========================================
+(no additional notes)

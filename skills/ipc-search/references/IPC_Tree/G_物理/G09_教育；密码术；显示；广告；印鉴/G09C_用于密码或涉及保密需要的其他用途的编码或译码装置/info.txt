@@ -1,0 +1,6 @@
+Code: G09C
+Level: subclass
+Section: 仪器
+Title: 用于密码或涉及保密需要的其他用途的编码或译码装置
+========================================
+(no additional notes)

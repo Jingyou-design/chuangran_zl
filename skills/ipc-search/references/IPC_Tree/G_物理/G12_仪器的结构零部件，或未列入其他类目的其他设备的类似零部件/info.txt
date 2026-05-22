@@ -1,0 +1,6 @@
+Code: G12
+Level: class
+Section: 仪器
+Title: 仪器的结构零部件，或未列入其他类目的其他设备的类似零部件
+========================================
+(no additional notes)

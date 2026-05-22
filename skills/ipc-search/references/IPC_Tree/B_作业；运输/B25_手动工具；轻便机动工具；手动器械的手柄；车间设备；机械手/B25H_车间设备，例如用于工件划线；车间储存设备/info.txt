@@ -1,0 +1,6 @@
+Code: B25H
+Level: subclass
+Section: 分离；混合
+Title: 车间设备，例如用于工件划线；车间储存设备
+========================================
+(no additional notes)

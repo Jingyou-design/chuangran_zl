@@ -1,0 +1,6 @@
+Code: B06
+Level: class
+Section: 分离；混合
+Title: 一般机械振动的发生或传递
+========================================
+(no additional notes)

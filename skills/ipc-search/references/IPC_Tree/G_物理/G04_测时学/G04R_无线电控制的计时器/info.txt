@@ -1,0 +1,6 @@
+Code: G04R
+Level: subclass
+Section: 仪器
+Title: 无线电控制的计时器
+========================================
+(no additional notes)

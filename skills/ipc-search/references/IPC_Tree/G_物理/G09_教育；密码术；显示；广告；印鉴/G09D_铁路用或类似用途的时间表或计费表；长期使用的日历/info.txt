@@ -1,0 +1,6 @@
+Code: G09D
+Level: subclass
+Section: 仪器
+Title: 铁路用或类似用途的时间表或计费表；长期使用的日历
+========================================
+(no additional notes)

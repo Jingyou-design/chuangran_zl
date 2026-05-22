@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>专利方案生成与评估系统</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        header h1 { font-size: 28px; margin-bottom: 8px; }
+        header p { opacity: 0.9; font-size: 14px; }
+
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .card h3 { margin-bottom: 12px; font-size: 16px; color: #555; display: flex; align-items: center; gap: 8px; }
+
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 13px;
+            resize: vertical;
+            min-height: 120px;
+        }
+        textarea:focus { outline: none; border-color: #667eea; }
+
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            color: white;
+            margin: 4px;
+        }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .btn-success { background: #52c41a; }
+        .btn-warning { background: #faad14; color: #333; }
+        .btn-danger { background: #f5222d; }
+        .btn-info { background: #1890ff; }
+        .btn-secondary { background: #8c8c8c; }
+
+        /* 上传区域 */
+        .upload-zone {
+            border: 2px dashed #d9d9d9;
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fafafa;
+        }
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: #667eea;
+            background: #f0f0ff;
+        }
+        .upload-zone .upload-icon { font-size: 48px; margin-bottom: 12px; }
+        .upload-zone .upload-text { font-size: 16px; color: #666; }
+        .upload-zone .upload-hint { font-size: 12px; color: #999; margin-top: 8px; }
+
+        .upload-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+        .upload-info .file-icon { font-size: 28px; }
+        .upload-info .file-detail { flex: 1; }
+        .upload-info .file-name { font-weight: 500; font-size: 14px; }
+        .upload-info .file-size { font-size: 12px; color: #999; }
+
+        /* Markdown 预览 */
+        .md-preview {
+            background: #fafafa;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin-top: 12px;
+        }
+
+        /* MinerU 解析进度 */
+        .parse-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            background: #e6f7ff;
+            border: 1px solid #91d5ff;
+            border-radius: 8px;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+        .parse-status .spinner {
+            width: 16px; height: 16px;
+            border: 2px solid #91d5ff;
+            border-top-color: #1890ff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 手动输入折叠 */
+        .manual-toggle {
+            display: inline-block;
+            margin-top: 12px;
+            font-size: 12px;
+            color: #667eea;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .manual-toggle:hover { color: #764ba2; }
+
+        .progress-list { max-height: 200px; overflow-y: auto; }
+        .progress-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 13px;
+            background: #f6f6f6;
+        }
+        .progress-item.running { background: #e6f7ff; border-left: 3px solid #1890ff; }
+        .progress-item.done { background: #f6ffed; border-left: 3px solid #52c41a; }
+        .progress-icon { font-size: 16px; }
+
+        .output-box {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 16px;
+            border-radius: 8px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .output-box .token { color: #7ee787; }
+        .output-box .meta { color: #d2a8ff; }
+        .output-box .error { color: #ff7b72; }
+
+        .interrupt-panel {
+            background: #fff7e6;
+            border: 1px solid #ffd591;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 12px;
+        }
+        .interrupt-panel h4 { color: #d46b08; margin-bottom: 10px; }
+        .solution-preview {
+            background: white;
+            border: 1px solid #eee;
+            border-radius: 6px;
+            padding: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #f6f6f6;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+        .status-bar .dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+        .status-bar .dot.active { background: #52c41a; animation: pulse 1.5s infinite; }
+        .status-bar .dot.error { background: #f5222d; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>专利方案生成与评估系统</h1>
+            <p>上传文档 → MinerU 解析 → 专利方案生成与评估</p>
+        </header>
+
+        <div class="grid">
+            <div>
+                <!-- 文件上传卡片 -->
+                <div class="card">
+                    <h3>📄 上传技术文档</h3>
+                    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                        <div class="upload-icon">📁</div>
+                        <div class="upload-text">点击或拖拽上传文件</div>
+                        <div class="upload-hint">支持 PDF / DOC / DOCX / PPT / PPTX / XLS / XLSX / PNG / JPG</div>
+                    </div>
+                    <input type="file" id="fileInput" class="hidden"
+                           accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg">
+
+                    <!-- 上传成功信息 -->
+                    <div id="uploadInfo" class="hidden">
+                        <div class="upload-info">
+                            <span class="file-icon">📎</span>
+                            <div class="file-detail">
+                                <div class="file-name" id="fileName"></div>
+                                <div class="file-size" id="fileSize"></div>
+                            </div>
+                            <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px;" onclick="resetUpload()">重新上传</button>
+                        </div>
+                    </div>
+
+                    <!-- MinerU 解析按钮 + 进度 -->
+                    <div id="parseSection" class="hidden" style="margin-top:12px;">
+                        <button class="btn btn-info" id="btnParse" onclick="parseDocument()">🔍 解析文档</button>
+                        <div id="parseStatus" class="hidden parse-status">
+                            <div class="spinner"></div>
+                            <span id="parseStatusText">正在解析...</span>
+                        </div>
+                    </div>
+
+                    <!-- Markdown 预览 -->
+                    <div id="previewSection" class="hidden" style="margin-top:12px;">
+                        <h4 style="font-size:14px;color:#555;margin-bottom:8px;">📝 解析结果预览</h4>
+                        <div class="md-preview" id="mdPreview"></div>
+                    </div>
+
+                    <!-- 启动按钮 -->
+                    <div style="margin-top:12px;">
+                        <button class="btn btn-primary" id="btnStart" onclick="startSession()" disabled>🚀 启动会话</button>
+                        <button class="btn btn-secondary" onclick="clearAll()">🧹 清空</button>
+                    </div>
+
+                    <!-- 手动输入折叠 -->
+                    <span class="manual-toggle" onclick="toggleManualInput()">手动输入文本</span>
+                    <div id="manualSection" class="hidden" style="margin-top:8px;">
+                        <textarea id="documentInput" placeholder="在此粘贴权利要求书或技术文档内容..."></textarea>
+                        <button class="btn btn-primary" style="margin-top:8px;" onclick="startSessionManual()">🚀 启动会话</button>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top:20px;">
+                    <h3>📊 执行进度</h3>
+                    <div class="status-bar" id="statusBar">
+                        <div class="dot" id="statusDot"></div>
+                        <span id="statusText">等待启动...</span>
+                    </div>
+                    <div class="progress-list" id="progressList"></div>
+                </div>
+            </div>
+
+            <div>
+                <div class="card">
+                    <h3>💬 实时输出</h3>
+                    <div class="output-box" id="outputBox"></div>
+                </div>
+
+                <div class="card hidden" id="interruptCard" style="margin-top:20px;">
+                    <div class="interrupt-panel">
+                        <h4>⏸️ 等待决策</h4>
+                        <div class="solution-preview" id="solutionPreview"></div>
+                        <p id="interruptMessage" style="font-size:13px;color:#666;margin-bottom:12px;"></p>
+                        <div id="actionButtons"></div>
+                        <textarea id="feedbackInput" placeholder="改进意见 / 反馈（可选）" style="margin-top:10px;min-height:60px;"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let threadId = null;
+        let currentReader = null;
+        let isRunning = false;
+
+        // 上传相关状态
+        let currentThreadId = null;
+        let currentFilePath = null;
+        let currentFileName = null;
+        let parsedMarkdown = null;
+        let isParsing = false;
+        let parseTimer = null;
+        let parseStartTime = null;
+
+        const els = {
+            docInput: document.getElementById('documentInput'),
+            btnStart: document.getElementById('btnStart'),
+            btnParse: document.getElementById('btnParse'),
+            outputBox: document.getElementById('outputBox'),
+            progressList: document.getElementById('progressList'),
+            statusBar: document.getElementById('statusBar'),
+            statusDot: document.getElementById('statusDot'),
+            statusText: document.getElementById('statusText'),
+            interruptCard: document.getElementById('interruptCard'),
+            solutionPreview: document.getElementById('solutionPreview'),
+            interruptMessage: document.getElementById('interruptMessage'),
+            actionButtons: document.getElementById('actionButtons'),
+            feedbackInput: document.getElementById('feedbackInput'),
+            uploadZone: document.getElementById('uploadZone'),
+            fileInput: document.getElementById('fileInput'),
+            uploadInfo: document.getElementById('uploadInfo'),
+            fileName: document.getElementById('fileName'),
+            fileSize: document.getElementById('fileSize'),
+            parseSection: document.getElementById('parseSection'),
+            parseStatus: document.getElementById('parseStatus'),
+            parseStatusText: document.getElementById('parseStatusText'),
+            previewSection: document.getElementById('previewSection'),
+            mdPreview: document.getElementById('mdPreview'),
+            manualSection: document.getElementById('manualSection'),
+        };
+
+        // ==================== 文件上传 ====================
+
+        els.uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            els.uploadZone.classList.add('dragover');
+        });
+        els.uploadZone.addEventListener('dragleave', () => {
+            els.uploadZone.classList.remove('dragover');
+        });
+        els.uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            els.uploadZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) uploadFile(file);
+        });
+
+        els.fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) uploadFile(file);
+        });
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        async function uploadFile(file) {
+            parsedMarkdown = null;
+            els.previewSection.classList.add('hidden');
+            els.btnStart.disabled = true;
+            setStatus('正在上传...', 'active');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/stream/upload`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || `HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                currentThreadId = data.thread_id;
+                currentFilePath = data.file_path;
+                currentFileName = data.filename;
+
+                els.fileName.textContent = data.filename;
+                els.fileSize.textContent = formatFileSize(data.file_size);
+                els.uploadInfo.classList.remove('hidden');
+                els.uploadZone.classList.add('hidden');
+                els.parseSection.classList.remove('hidden');
+
+                setStatus('文件已上传', 'idle');
+                logMeta('📎 文件已上传: ' + data.filename + ' (' + formatFileSize(data.file_size) + ')');
+
+            } catch (err) {
+                alert('上传失败: ' + err.message);
+                setStatus('上传失败', 'error');
+            }
+        }
+
+        function resetUpload() {
+            currentThreadId = null;
+            currentFilePath = null;
+            currentFileName = null;
+            parsedMarkdown = null;
+            isParsing = false;
+            if (parseTimer) { clearInterval(parseTimer); parseTimer = null; }
+
+            els.uploadInfo.classList.add('hidden');
+            els.uploadZone.classList.remove('hidden');
+            els.parseSection.classList.add('hidden');
+            els.parseStatus.classList.add('hidden');
+            els.previewSection.classList.add('hidden');
+            els.btnStart.disabled = true;
+            els.btnParse.disabled = false;
+            els.btnParse.textContent = '🔍 解析文档';
+            els.fileInput.value = '';
+        }
+
+        // ==================== MinerU 解析 ====================
+
+        async function parseDocument() {
+            if (!currentFilePath) { alert('请先上传文件'); return; }
+            if (isParsing) return;
+
+            isParsing = true;
+            parsedMarkdown = null;
+            els.btnParse.disabled = true;
+            els.btnParse.textContent = '解析中...';
+            els.parseStatus.classList.remove('hidden');
+            els.previewSection.classList.add('hidden');
+            els.btnStart.disabled = true;
+
+            parseStartTime = Date.now();
+            els.parseStatusText.textContent = '正在提交解析任务...';
+
+            parseTimer = setInterval(() => {
+                const elapsed = Math.round((Date.now() - parseStartTime) / 1000);
+                els.parseStatusText.textContent = '正在解析... (' + elapsed + 's)';
+            }, 1000);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/stream/parse`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        thread_id: currentThreadId,
+                        file_path: currentFilePath,
+                        filename: currentFileName,
+                        model_version: 'vlm',
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+
+                await readSSE(response, handleParseEvent);
+
+            } catch (err) {
+                onParseError('解析请求失败: ' + err.message);
+            }
+        }
+
+        function handleParseEvent(event) {
+            const type = event.type;
+            const data = event.data || {};
+
+            if (type === 'progress' && event.name === 'mineru') {
+                const state = data.state || '';
+                const elapsed = data.elapsed || 0;
+                const stateMap = { pending: '排队中', 'waiting-file': '等待文件', processing: '解析中', running: '解析中', done: '完成' };
+                const stateText = stateMap[state] || state;
+                els.parseStatusText.textContent = stateText + ' (' + elapsed + 's)';
+                logMeta('🔄 MinerU: ' + stateText + ' (' + elapsed + 's)');
+                return;
+            }
+
+            if (type === 'mineru_done') {
+                onParseDone(data);
+                return;
+            }
+
+            if (type === 'error') {
+                onParseError(data.message || 'MinerU 解析失败');
+                return;
+            }
+        }
+
+        function onParseDone(data) {
+            if (parseTimer) { clearInterval(parseTimer); parseTimer = null; }
+            isParsing = false;
+            parsedMarkdown = data.markdown || '';
+
+            els.parseStatus.classList.add('hidden');
+            els.btnParse.textContent = '✅ 解析完成';
+            els.btnParse.disabled = true;
+
+            const preview = parsedMarkdown.length > 3000
+                ? parsedMarkdown.substring(0, 3000) + '\n\n... (已截断，共 ' + parsedMarkdown.length + ' 字符)'
+                : parsedMarkdown;
+            els.mdPreview.textContent = preview;
+            els.previewSection.classList.remove('hidden');
+            els.btnStart.disabled = false;
+
+            setStatus('文档解析完成，可以启动会话', 'idle');
+            logMeta('✅ MinerU 解析完成: ' + data.markdown_length + ' 字符');
+        }
+
+        function onParseError(message) {
+            if (parseTimer) { clearInterval(parseTimer); parseTimer = null; }
+            isParsing = false;
+            els.parseStatus.classList.add('hidden');
+            els.btnParse.disabled = false;
+            els.btnParse.textContent = '🔍 重新解析';
+            setStatus('解析失败', 'error');
+            logMeta('❌ ' + message);
+        }
+
+        // ==================== 手动输入 ====================
+
+        function toggleManualInput() {
+            els.manualSection.classList.toggle('hidden');
+        }
+
+        async function startSessionManual() {
+            const doc = els.docInput.value.trim();
+            if (!doc) { alert('请先输入文档内容'); return; }
+            parsedMarkdown = doc;
+            currentThreadId = null;
+            await startSession();
+        }
+
+        // ==================== 原有流程 ====================
+
+        function setStatus(text, type = 'idle') {
+            els.statusText.textContent = text;
+            els.statusDot.className = 'dot';
+            if (type === 'active') els.statusDot.classList.add('active');
+            if (type === 'error') els.statusDot.classList.add('error');
+        }
+
+        function logOutput(text, cls = '') {
+            const span = document.createElement('span');
+            span.className = cls;
+            span.textContent = text;
+            els.outputBox.appendChild(span);
+            els.outputBox.scrollTop = els.outputBox.scrollHeight;
+        }
+
+        function logMeta(text) {
+            const div = document.createElement('div');
+            div.className = 'meta';
+            div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + text;
+            els.outputBox.appendChild(div);
+            els.outputBox.scrollTop = els.outputBox.scrollHeight;
+        }
+
+        function addProgress(name, status) {
+            const id = 'prog-' + name;
+            let item = document.getElementById(id);
+            if (!item) {
+                item = document.createElement('div');
+                item.id = id;
+                item.className = 'progress-item running';
+                els.progressList.appendChild(item);
+            }
+            const icon = status === 'done' ? '✅' : status === 'error' ? '❌' : '🔄';
+            item.className = 'progress-item ' + (status === 'done' ? 'done' : status === 'error' ? '' : 'running');
+            item.innerHTML = '<span class="progress-icon">' + icon + '</span><span>' + name + '</span>';
+        }
+
+        function showInterrupt(data) {
+            els.interruptCard.classList.remove('hidden');
+            els.solutionPreview.textContent = data.current_solution || '暂无方案';
+            els.interruptMessage.textContent = data.message || '';
+            els.feedbackInput.value = '';
+
+            const isPostEval = data.name === 'post_eval_review';
+            if (isPostEval) {
+                els.actionButtons.innerHTML = '<button class="btn btn-success" onclick="resume(\'disclosure\')">📄 生成交底书</button><button class="btn btn-warning" onclick="resume(\'revise\')">🔄 再生成其他方案</button>';
+            } else {
+                els.actionButtons.innerHTML = '<button class="btn btn-info" onclick="resume(\'evaluate\')">🔍 去评估</button><button class="btn btn-warning" onclick="resume(\'revise\')">✏️ 改进</button><button class="btn btn-success" onclick="resume(\'confirm\')">✅ 确认</button>';
+            }
+            setStatus('等待用户决策', 'idle');
+        }
+
+        function hideInterrupt() {
+            els.interruptCard.classList.add('hidden');
+        }
+
+        async function readSSE(response, onEvent) {
+            const reader = response.body.getReader();
+            currentReader = reader;
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop();
+
+                    for (const chunk of lines) {
+                        const line = chunk.trim();
+                        if (!line.startsWith('data:')) continue;
+                        const jsonStr = line.slice(5).trim();
+                        if (!jsonStr) continue;
+                        try {
+                            const event = JSON.parse(jsonStr);
+                            onEvent(event);
+                        } catch (e) {
+                            console.warn('Parse SSE data failed:', jsonStr);
+                        }
+                    }
+                }
+            } finally {
+                currentReader = null;
+            }
+        }
+
+        function handleEvent(event) {
+            const type = event.type;
+            const name = event.name || '';
+            const data = event.data || {};
+
+            if (type === 'meta' && name === 'thread_id') {
+                threadId = data.thread_id;
+                logMeta('会话已创建: ' + threadId);
+                return;
+            }
+
+            if (type === 'node_start') {
+                addProgress(name, 'running');
+                logMeta('▶️ 开始: ' + name);
+                return;
+            }
+
+            if (type === 'node_end') {
+                addProgress(name, 'done');
+                logMeta('✅ 完成: ' + name);
+                return;
+            }
+
+            if (type === 'token') {
+                logOutput(data.token || '', 'token');
+                return;
+            }
+
+            if (type === 'progress') {
+                const status = data.status || '';
+                if (status === 'started') {
+                    addProgress(name, 'running');
+                    logMeta('▶️ 开始: ' + name);
+                } else if (status === 'completed') {
+                    addProgress(name, 'done');
+                    logMeta('✅ 完成: ' + name + ' (通过: ' + data.passed + ')');
+                }
+                return;
+            }
+
+            if (type === 'interrupt') {
+                logMeta('⏸️ 遇到中断点');
+                showInterrupt(data);
+                isRunning = false;
+                els.btnStart.disabled = false;
+                els.btnStart.textContent = '🚀 启动会话';
+                return;
+            }
+
+            if (type === 'error') {
+                logMeta('❌ 错误: ' + (data.message || 'Unknown error'));
+                setStatus('发生错误', 'error');
+                isRunning = false;
+                els.btnStart.disabled = false;
+                els.btnStart.textContent = '🚀 启动会话';
+                return;
+            }
+
+            if (type === 'custom') {
+                logMeta('自定义事件: ' + name + ' -> ' + JSON.stringify(data));
+            }
+        }
+
+        async function startSession() {
+            const doc = parsedMarkdown || els.docInput.value.trim();
+            if (!doc) { alert('请先上传并解析文档，或手动输入内容'); return; }
+
+            hideInterrupt();
+            els.outputBox.innerHTML = '';
+            els.progressList.innerHTML = '';
+            els.btnStart.disabled = true;
+            els.btnStart.textContent = '运行中...';
+            isRunning = true;
+            setStatus('正在运行...', 'active');
+
+            try {
+                const body = { document: doc };
+                if (currentThreadId) body.thread_id = currentThreadId;
+
+                const response = await fetch(`${API_BASE}/api/v1/stream/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+
+                await readSSE(response, handleEvent);
+
+                if (isRunning) {
+                    setStatus('运行完成', 'idle');
+                    isRunning = false;
+                    els.btnStart.disabled = false;
+                    els.btnStart.textContent = '🚀 启动会话';
+                }
+            } catch (err) {
+                logMeta('❌ 请求失败: ' + err.message);
+                setStatus('请求失败', 'error');
+                isRunning = false;
+                els.btnStart.disabled = false;
+                els.btnStart.textContent = '🚀 启动会话';
+            }
+        }
+
+        async function resume(intent) {
+            if (!threadId) { alert('会话未启动'); return; }
+
+            hideInterrupt();
+            els.btnStart.disabled = true;
+            els.btnStart.textContent = '运行中...';
+            isRunning = true;
+            setStatus('正在运行...', 'active');
+
+            const feedback = els.feedbackInput.value.trim();
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/stream/resume`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thread_id: threadId, intent, feedback }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+
+                await readSSE(response, handleEvent);
+
+                if (isRunning) {
+                    setStatus('运行完成', 'idle');
+                    isRunning = false;
+                    els.btnStart.disabled = false;
+                    els.btnStart.textContent = '🚀 启动会话';
+                }
+            } catch (err) {
+                logMeta('❌ 请求失败: ' + err.message);
+                setStatus('请求失败', 'error');
+                isRunning = false;
+                els.btnStart.disabled = false;
+                els.btnStart.textContent = '🚀 启动会话';
+            }
+        }
+
+        function cleanupSession(tid) {
+            if (!tid) return;
+            try {
+                navigator.sendBeacon(
+                    `${API_BASE}/api/v1/stream/cleanup`,
+                    JSON.stringify({ thread_id: tid })
+                );
+            } catch (e) {
+                // sendBeacon 不支持时用 fetch（页面关闭时可能失败，不影响）
+                fetch(`${API_BASE}/api/v1/stream/cleanup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thread_id: tid }),
+                    keepalive: true,
+                }).catch(() => {});
+            }
+        }
+
+        // 页面关闭时清理
+        window.addEventListener('beforeunload', () => {
+            const tid = currentThreadId || threadId;
+            if (tid) cleanupSession(tid);
+        });
+
+        function clearAll() {
+            // 清理服务端文件
+            const tid = currentThreadId || threadId;
+            if (tid) cleanupSession(tid);
+
+            els.outputBox.innerHTML = '';
+            els.progressList.innerHTML = '';
+            els.docInput.value = '';
+            hideInterrupt();
+            threadId = null;
+            currentThreadId = null;
+            currentFilePath = null;
+            currentFileName = null;
+            parsedMarkdown = null;
+            isRunning = false;
+            isParsing = false;
+            if (parseTimer) { clearInterval(parseTimer); parseTimer = null; }
+            if (currentReader) {
+                currentReader.cancel();
+                currentReader = null;
+            }
+            resetUpload();
+            setStatus('等待启动...', 'idle');
+            els.btnStart.disabled = true;
+            els.btnStart.textContent = '🚀 启动会话';
+        }
+    </script>
+</body>
+</html>

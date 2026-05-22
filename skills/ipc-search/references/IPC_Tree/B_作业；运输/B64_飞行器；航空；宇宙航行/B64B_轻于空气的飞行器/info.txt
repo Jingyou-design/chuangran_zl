@@ -1,0 +1,6 @@
+Code: B64B
+Level: subclass
+Section: 分离；混合
+Title: 轻于空气的飞行器（一般飞机用的地面设备入B64F）
+========================================
+(no additional notes)

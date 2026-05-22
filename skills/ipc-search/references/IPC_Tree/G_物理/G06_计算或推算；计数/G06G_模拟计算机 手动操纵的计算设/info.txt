@@ -1,0 +1,6 @@
+Code: G06G
+Level: subclass
+Section: 仪器
+Title: 模拟计算机（模拟光学计算设备入G06E3/00） 手动操纵的计算设
+========================================
+(no additional notes)
