@@ -83,6 +83,7 @@ def _format_event(event: dict) -> dict | None:
                 "name": payload.get("type", "human_review"),
                 "data": {
                     "current_solution": payload.get("current_solution", ""),
+                    "current_content": payload.get("current_content", ""),
                     "revision_count": payload.get("revision_count", 0),
                     "message": payload.get("message", ""),
                 },

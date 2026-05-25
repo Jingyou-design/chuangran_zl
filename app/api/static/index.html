@@ -269,9 +269,8 @@
                         <div class="md-preview" id="mdPreview"></div>
                     </div>
 
-                    <!-- 启动按钮 -->
+                    <!-- 解析完成后自动启动，仅保留清空按钮 -->
                     <div style="margin-top:12px;">
-                        <button class="btn btn-primary" id="btnStart" onclick="startSession()" disabled>🚀 启动会话</button>
                         <button class="btn btn-secondary" onclick="clearAll()">🧹 清空</button>
                     </div>
 
@@ -305,7 +304,8 @@
                         <div class="solution-preview" id="solutionPreview"></div>
                         <p id="interruptMessage" style="font-size:13px;color:#666;margin-bottom:12px;"></p>
                         <div id="actionButtons"></div>
-                        <textarea id="feedbackInput" placeholder="改进意见 / 反馈（可选）" style="margin-top:10px;min-height:60px;"></textarea>
+                        <textarea id="feedbackInput" placeholder="改进意见 / 反馈（可选，配合上方按钮使用）" style="margin-top:10px;min-height:50px;"></textarea>
+
                     </div>
                 </div>
             </div>
@@ -329,7 +329,6 @@
 
         const els = {
             docInput: document.getElementById('documentInput'),
-            btnStart: document.getElementById('btnStart'),
             btnParse: document.getElementById('btnParse'),
             outputBox: document.getElementById('outputBox'),
             progressList: document.getElementById('progressList'),
@@ -384,7 +383,6 @@
         async function uploadFile(file) {
             parsedMarkdown = null;
             els.previewSection.classList.add('hidden');
-            els.btnStart.disabled = true;
             setStatus('正在上传...', 'active');
 
             const formData = new FormData();
@@ -434,7 +432,6 @@
             els.parseSection.classList.add('hidden');
             els.parseStatus.classList.add('hidden');
             els.previewSection.classList.add('hidden');
-            els.btnStart.disabled = true;
             els.btnParse.disabled = false;
             els.btnParse.textContent = '🔍 解析文档';
             els.fileInput.value = '';
@@ -452,7 +449,6 @@
             els.btnParse.textContent = '解析中...';
             els.parseStatus.classList.remove('hidden');
             els.previewSection.classList.add('hidden');
-            els.btnStart.disabled = true;
 
             parseStartTime = Date.now();
             els.parseStatusText.textContent = '正在提交解析任务...';
@@ -524,10 +520,12 @@
                 : parsedMarkdown;
             els.mdPreview.textContent = preview;
             els.previewSection.classList.remove('hidden');
-            els.btnStart.disabled = false;
 
-            setStatus('文档解析完成，可以启动会话', 'idle');
-            logMeta('✅ MinerU 解析完成: ' + data.markdown_length + ' 字符');
+            setStatus('文档解析完成，自动启动会话...', 'active');
+            logMeta('✅ MinerU 解析完成: ' + data.markdown_length + ' 字符，自动启动会话');
+
+            // 解析完成后自动启动会话
+            startSession();
         }
 
         function onParseError(message) {
@@ -599,11 +597,17 @@
             els.interruptMessage.textContent = data.message || '';
             els.feedbackInput.value = '';
 
-            const isPostEval = data.name === 'post_eval_review';
-            if (isPostEval) {
+            const interruptName = data.name || '';
+            if (interruptName === 'extract_review' || interruptName === 'generate_review') {
+                els.actionButtons.innerHTML = '<button class="btn btn-success" onclick="resume(\'confirm\')">✅ 确认并继续</button><button class="btn btn-warning" onclick="resume(\'confirm\')">✏️ 提交修改</button>';
+                // 把当前内容预填到 feedbackInput，方便用户修改
+                els.feedbackInput.value = data.current_content || '';
+            } else if (interruptName === 'post_eval_review') {
                 els.actionButtons.innerHTML = '<button class="btn btn-success" onclick="resume(\'disclosure\')">📄 生成交底书</button><button class="btn btn-warning" onclick="resume(\'revise\')">🔄 再生成其他方案</button>';
+                els.feedbackInput.value = '';
             } else {
                 els.actionButtons.innerHTML = '<button class="btn btn-info" onclick="resume(\'evaluate\')">🔍 去评估</button><button class="btn btn-warning" onclick="resume(\'revise\')">✏️ 改进</button><button class="btn btn-success" onclick="resume(\'confirm\')">✅ 确认</button>';
+                els.feedbackInput.value = '';
             }
             setStatus('等待用户决策', 'idle');
         }
@@ -689,8 +693,6 @@
                 logMeta('⏸️ 遇到中断点');
                 showInterrupt(data);
                 isRunning = false;
-                els.btnStart.disabled = false;
-                els.btnStart.textContent = '🚀 启动会话';
                 return;
             }
 
@@ -698,8 +700,19 @@
                 logMeta('❌ 错误: ' + (data.message || 'Unknown error'));
                 setStatus('发生错误', 'error');
                 isRunning = false;
-                els.btnStart.disabled = false;
-                els.btnStart.textContent = '🚀 启动会话';
+                return;
+            }
+
+            if (type === 'disclosure_done') {
+                logMeta('📄 交底书已生成! 共 ' + (data.length || 0) + ' 字符');
+                if (data.file_name) {
+                    const downloadUrl = `${API_BASE}/files/disclosure_output/${data.file_name}`;
+                    const div = document.createElement('div');
+                    div.className = 'meta';
+                    div.innerHTML = '<a href="' + downloadUrl + '" target="_blank" download style="color:#7ee787;text-decoration:underline;">📥 下载交底书 MD 文件</a>';
+                    els.outputBox.appendChild(div);
+                    els.outputBox.scrollTop = els.outputBox.scrollHeight;
+                }
                 return;
             }
 
@@ -715,8 +728,6 @@
             hideInterrupt();
             els.outputBox.innerHTML = '';
             els.progressList.innerHTML = '';
-            els.btnStart.disabled = true;
-            els.btnStart.textContent = '运行中...';
             isRunning = true;
             setStatus('正在运行...', 'active');
 
@@ -739,15 +750,11 @@
                 if (isRunning) {
                     setStatus('运行完成', 'idle');
                     isRunning = false;
-                    els.btnStart.disabled = false;
-                    els.btnStart.textContent = '🚀 启动会话';
                 }
             } catch (err) {
                 logMeta('❌ 请求失败: ' + err.message);
                 setStatus('请求失败', 'error');
                 isRunning = false;
-                els.btnStart.disabled = false;
-                els.btnStart.textContent = '🚀 启动会话';
             }
         }
 
@@ -755,8 +762,6 @@
             if (!threadId) { alert('会话未启动'); return; }
 
             hideInterrupt();
-            els.btnStart.disabled = true;
-            els.btnStart.textContent = '运行中...';
             isRunning = true;
             setStatus('正在运行...', 'active');
 
@@ -778,27 +783,22 @@
                 if (isRunning) {
                     setStatus('运行完成', 'idle');
                     isRunning = false;
-                    els.btnStart.disabled = false;
-                    els.btnStart.textContent = '🚀 启动会话';
                 }
             } catch (err) {
                 logMeta('❌ 请求失败: ' + err.message);
                 setStatus('请求失败', 'error');
                 isRunning = false;
-                els.btnStart.disabled = false;
-                els.btnStart.textContent = '🚀 启动会话';
             }
         }
 
         function cleanupSession(tid) {
             if (!tid) return;
             try {
-                navigator.sendBeacon(
-                    `${API_BASE}/api/v1/stream/cleanup`,
-                    JSON.stringify({ thread_id: tid })
-                );
+                // sendBeacon 用 Blob 指定 Content-Type（页面关闭场景）
+                const blob = new Blob([JSON.stringify({ thread_id: tid })], { type: 'application/json' });
+                navigator.sendBeacon(`${API_BASE}/api/v1/stream/cleanup`, blob);
             } catch (e) {
-                // sendBeacon 不支持时用 fetch（页面关闭时可能失败，不影响）
+                // 降级用 fetch
                 fetch(`${API_BASE}/api/v1/stream/cleanup`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -815,9 +815,15 @@
         });
 
         function clearAll() {
-            // 清理服务端文件
+            // 清理服务端文件（用 fetch 确保 Content-Type 正确）
             const tid = currentThreadId || threadId;
-            if (tid) cleanupSession(tid);
+            if (tid) {
+                fetch(`${API_BASE}/api/v1/stream/cleanup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thread_id: tid }),
+                }).catch(() => {});
+            }
 
             els.outputBox.innerHTML = '';
             els.progressList.innerHTML = '';
@@ -837,8 +843,6 @@
             }
             resetUpload();
             setStatus('等待启动...', 'idle');
-            els.btnStart.disabled = true;
-            els.btnStart.textContent = '🚀 启动会话';
         }
     </script>
 </body>

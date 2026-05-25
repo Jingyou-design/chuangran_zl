@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.controller_stream.session_stream import stream_session, resume_session, resume_session_with_text
+from app.controller_stream.session_stream import stream_session, resume_session
 from app.services.mineru_service import MinerUService
 
 
@@ -43,9 +43,9 @@ class ResumeRequest(BaseModel):
     feedback: Optional[str] = ""
 
 
-class ResumeTextRequest(BaseModel):
-    thread_id: str
-    user_input: str
+# class ResumeTextRequest(BaseModel):
+#     thread_id: str
+#     user_input: str
 
 
 class ParseRequest(BaseModel):
@@ -190,16 +190,16 @@ async def resume_stream(req: ResumeRequest):
     )
 
 
-@router.post("/resume-text")
-async def resume_stream_text(req: ResumeTextRequest):
-    """恢复会话（自然语言版本）。"""
-    if not req.thread_id:
-        raise HTTPException(status_code=400, detail="thread_id is required")
-
-    return StreamingResponse(
-        _sse_generator(resume_session_with_text(req.thread_id, req.user_input)),
-        media_type="text/event-stream",
-    )
+# @router.post("/resume-text")
+# async def resume_stream_text(req: ResumeTextRequest):
+#     """恢复会话（自然语言版本）。"""
+#     if not req.thread_id:
+#         raise HTTPException(status_code=400, detail="thread_id is required")
+#
+#     return StreamingResponse(
+#         _sse_generator(resume_session_with_text(req.thread_id, req.user_input)),
+#         media_type="text/event-stream",
+#     )
 
 
 # ---------- 清理端点 ----------

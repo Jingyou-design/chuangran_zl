@@ -30,7 +30,7 @@ _llm = ChatDeepSeek(
 
 
 async def _extract_node(state: DraftState):
-    prompt = f"""请从以下文档中提取关键技术点或结构信息。只输出提取结果，不要有多余解释。
+    prompt = f"""请从以下文档中提取关键技术点或结构信息。主要技术特征,次要技术特征,只输出提取结果，不要有多余解释。
 
                 文档内容：
                 {state['document']}
@@ -45,12 +45,12 @@ async def _extract_node(state: DraftState):
 
 
 async def _generate_node(state: DraftState):
-    prompt = f"""基于以下提取的技术/结构信息，生成一个完整的技术方案。
+    prompt = f"""基于以下提取的技术/结构信息，生成多个技术方案，只描述核心发明点和关键实现方式，不要展开成完整交底书。
 
             提取的技术/结构：
             {state['tech_structure']}
 
-            请输出详细方案："""
+            方案如下："""
     chunks = []
     async for chunk in _llm.astream(prompt):
         content = getattr(chunk, "content", str(chunk))
