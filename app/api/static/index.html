@@ -591,23 +591,69 @@
             item.innerHTML = '<span class="progress-icon">' + icon + '</span><span>' + name + '</span>';
         }
 
-        function showInterrupt(data) {
+        function showInterrupt(data, interruptName) {
+            interruptName = interruptName || data.name || '';
             els.interruptCard.classList.remove('hidden');
-            els.solutionPreview.textContent = data.current_solution || '暂无方案';
-            els.interruptMessage.textContent = data.message || '';
             els.feedbackInput.value = '';
 
-            const interruptName = data.name || '';
-            if (interruptName === 'extract_review' || interruptName === 'generate_review') {
-                els.actionButtons.innerHTML = '<button class="btn btn-success" onclick="resume(\'confirm\')">✅ 确认并继续</button><button class="btn btn-warning" onclick="resume(\'confirm\')">✏️ 提交修改</button>';
-                // 把当前内容预填到 feedbackInput，方便用户修改
+            if (interruptName === 'solution_review') {
+                // 多方案评估结果展示
+                const solutions = [];
+                try { solutions.push(...JSON.parse(data.solutions_json || '[]')); } catch(e) {}
+                let html = '<div style="margin-bottom:8px;font-weight:500;">评估结果</div>';
+                solutions.forEach((sol, i) => {
+                    const icon = sol.passed ? '✅' : '❌';
+                    const status = sol.passed ? '评估通过' : '评估不通过';
+                    const preview = (sol.content || '').substring(0, 120);
+                    html += '<div style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px;">';
+                    html += '<div style="font-weight:500;margin-bottom:4px;">方案' + (i+1) + ' ' + icon + ' ' + status + '</div>';
+                    html += '<div style="font-size:12px;color:#666;margin-bottom:8px;">' + preview + (sol.content && sol.content.length > 120 ? '...' : '') + '</div>';
+                    html += '<button class="btn btn-success" style="font-size:12px;padding:6px 14px;" onclick="resumeWithIndex(\'disclosure\',' + i + ')">📄 生成交底书</button>';
+                    html += '<button class="btn btn-warning" style="font-size:12px;padding:6px 14px;" onclick="resumeWithIndex(\'revise\',' + i + ')">🔄 改进</button>';
+                    html += '</div>';
+                });
+                els.solutionPreview.innerHTML = html;
+                els.solutionPreview.style.display = 'block';
+                els.solutionPreview.style.whiteSpace = 'normal';
+                els.solutionPreview.style.maxHeight = 'none';
+                els.actionButtons.innerHTML = '';
+                els.interruptMessage.textContent = data.message || '请选择一个方案进行下一步操作';
+            } else if (interruptName === 'single_review') {
+                // 单方案评估结果（revise后）
+                const passed = data.evaluation_passed;
+                const icon = passed ? '✅' : '❌';
+                const status = passed ? '评估通过' : '评估不通过';
+                const reason = data.rejection_reason || '';
+                let html = '<div style="font-weight:500;margin-bottom:4px;">改进后方案评估结果 ' + icon + ' ' + status + '</div>';
+                if (reason) {
+                    html += '<div style="font-size:12px;color:#d46b08;margin-top:4px;">原因：' + reason + '</div>';
+                }
+                html += '<div style="margin-top:8px;">';
+                html += '<button class="btn btn-success" onclick="resume(\'disclosure\')">📄 生成交底书</button>';
+                html += '<button class="btn btn-warning" onclick="resume(\'revise\')">🔄 继续改进</button>';
+                html += '</div>';
+                els.solutionPreview.innerHTML = html;
+                els.solutionPreview.style.display = 'block';
+                els.solutionPreview.style.whiteSpace = 'normal';
+                els.solutionPreview.style.maxHeight = 'none';
+                els.actionButtons.innerHTML = '';
+                els.interruptMessage.textContent = data.message || '';
+            } else if (interruptName === 'extract_review') {
+                els.solutionPreview.textContent = data.current_content || data.current_solution || '暂无内容';
+                els.solutionPreview.style.display = 'block';
+                els.solutionPreview.style.whiteSpace = 'pre-wrap';
+                els.solutionPreview.style.maxHeight = '200px';
+                els.actionButtons.innerHTML = '<button class="btn btn-success" onclick="resume(\'confirm\')">📤 提交</button>';
                 els.feedbackInput.value = data.current_content || '';
-            } else if (interruptName === 'post_eval_review') {
-                els.actionButtons.innerHTML = '<button class="btn btn-success" onclick="resume(\'disclosure\')">📄 生成交底书</button><button class="btn btn-warning" onclick="resume(\'revise\')">🔄 再生成其他方案</button>';
-                els.feedbackInput.value = '';
+                els.feedbackInput.placeholder = '直接编辑上方内容后提交，或不修改直接提交';
+                els.interruptMessage.textContent = data.message || '';
             } else {
+                els.solutionPreview.textContent = data.current_solution || data.current_content || '暂无方案';
+                els.solutionPreview.style.display = 'block';
+                els.solutionPreview.style.whiteSpace = 'pre-wrap';
+                els.solutionPreview.style.maxHeight = '200px';
                 els.actionButtons.innerHTML = '<button class="btn btn-info" onclick="resume(\'evaluate\')">🔍 去评估</button><button class="btn btn-warning" onclick="resume(\'revise\')">✏️ 改进</button><button class="btn btn-success" onclick="resume(\'confirm\')">✅ 确认</button>';
-                els.feedbackInput.value = '';
+                els.interruptMessage.textContent = data.message || '';
             }
             setStatus('等待用户决策', 'idle');
         }
@@ -691,7 +737,7 @@
 
             if (type === 'interrupt') {
                 logMeta('⏸️ 遇到中断点');
-                showInterrupt(data);
+                showInterrupt(data, name);
                 isRunning = false;
                 return;
             }
@@ -771,7 +817,40 @@
                 const response = await fetch(`${API_BASE}/api/v1/stream/resume`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ thread_id: threadId, intent, feedback }),
+                    body: JSON.stringify({ thread_id: threadId, intent, feedback, selected_index: -1 }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+
+                await readSSE(response, handleEvent);
+
+                if (isRunning) {
+                    setStatus('运行完成', 'idle');
+                    isRunning = false;
+                }
+            } catch (err) {
+                logMeta('❌ 请求失败: ' + err.message);
+                setStatus('请求失败', 'error');
+                isRunning = false;
+            }
+        }
+
+        async function resumeWithIndex(intent, selectedIndex) {
+            if (!threadId) { alert('会话未启动'); return; }
+
+            hideInterrupt();
+            isRunning = true;
+            setStatus('正在运行...', 'active');
+
+            const feedback = els.feedbackInput.value.trim();
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/stream/resume`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thread_id: threadId, intent, feedback, selected_index: selectedIndex }),
                 });
 
                 if (!response.ok) {

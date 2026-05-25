@@ -101,7 +101,7 @@ class MinerUService:
         return batch_id
 
     async def poll_batch(
-        self, batch_id: str, timeout: int = DEFAULT_TIMEOUT
+        self, batch_id: str, timeout: int = DEFAULT_TIMEOUT, thread_id: str = ""
     ) -> AsyncGenerator[dict, None]:
         """轮询 batch 解析结果，yield 进度事件。
 
@@ -181,7 +181,7 @@ class MinerUService:
             return
 
         try:
-            save_dir = str(Path("files/mineru_output") / batch_id)
+            save_dir = str(Path("files/mineru_output") / (thread_id or batch_id))
             md_content, md_path = await self._fetch_markdown(zip_url, md_url, save_dir)
         except Exception as e:
             yield {"type": "error", "name": "mineru", "data": {"message": f"下载失败: {e}"}}
@@ -266,6 +266,7 @@ class MinerUService:
         filename: str,
         model_version: str = "vlm",
         timeout: int = DEFAULT_TIMEOUT,
+        thread_id: str = "",
     ) -> AsyncGenerator[dict, None]:
         """端到端处理：申请上传 → PUT 文件 → 轮询进度 → 下载 Markdown。"""
 
@@ -277,5 +278,5 @@ class MinerUService:
             return
 
         # 2. 轮询 batch 结果 + 下载
-        async for event in self.poll_batch(batch_id, timeout):
+        async for event in self.poll_batch(batch_id, timeout, thread_id=thread_id):
             yield event

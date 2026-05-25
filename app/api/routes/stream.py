@@ -41,6 +41,7 @@ class ResumeRequest(BaseModel):
     thread_id: str
     intent: str
     feedback: Optional[str] = ""
+    selected_index: Optional[int] = -1
 
 
 # class ResumeTextRequest(BaseModel):
@@ -182,7 +183,11 @@ async def resume_stream(req: ResumeRequest):
     if not req.thread_id:
         raise HTTPException(status_code=400, detail="thread_id is required")
 
-    decision = {"intent": req.intent, "feedback": req.feedback or ""}
+    decision = {
+        "intent": req.intent,
+        "feedback": req.feedback or "",
+        "selected_index": req.selected_index or -1,
+    }
 
     return StreamingResponse(
         _sse_generator(resume_session(req.thread_id, decision)),

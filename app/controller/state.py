@@ -1,30 +1,29 @@
 from typing_extensions import TypedDict
-from typing import Literal
 
 
 class MasterState(TypedDict):
-    """中控图全局状态，贯通初稿、改进、评估、交底书全流程。"""
+    """中控图全局状态，贯通初稿、评估、改进、交底书全流程。"""
 
     # ---------- 原始输入 ----------
     document: str
 
     # ---------- 初稿工作流产物 ----------
-    draft_solution: str
+    tech_structure: str
+    solution: str  # generate_llm 输出的原始方案文本（含多个方案）
 
-    # ---------- 当前生效方案 ----------
+    # ---------- 多方案评估结果（JSON字符串） ----------
+    solutions_json: str  # [{"content":"...","report":"...","passed":true,"reason":""}, ...]
+
+    # ---------- 用户选择 ----------
+    selected_index: int  # 用户选中的方案索引（-1=未选）
     current_solution: str
-
-    # ---------- 用户意图（由外部对话Agent解析后写入） ----------
-    user_intent: Literal["evaluate", "revise", "regenerate", "confirm", ""]
+    user_intent: str  # "disclosure" / "revise"
     user_feedback: str
 
-    # ---------- 评估结果 ----------
+    # ---------- 单方案评估（revise后使用） ----------
     evaluation_report: str
     evaluation_passed: bool
     rejection_reason: str
-
-    # ---------- 改进工作流产物 ----------
-    revised_solution: str
 
     # ---------- 循环控制 ----------
     revision_count: int

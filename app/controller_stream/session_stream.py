@@ -78,15 +78,25 @@ def _format_event(event: dict) -> dict | None:
             }
 
         if name == "interrupt":
+            interrupt_type = payload.get("type", "human_review")
+            data = {
+                "current_solution": payload.get("current_solution", ""),
+                "current_content": payload.get("current_content", "") or payload.get("content", ""),
+                "revision_count": payload.get("revision_count", 0),
+                "message": payload.get("message", ""),
+            }
+
+            if interrupt_type == "solution_review":
+                data["solutions_json"] = payload.get("solutions_json", "[]")
+            elif interrupt_type == "single_review":
+                data["evaluation_passed"] = payload.get("evaluation_passed", False)
+                data["evaluation_report"] = payload.get("evaluation_report", "")
+                data["rejection_reason"] = payload.get("rejection_reason", "")
+
             return {
                 "type": "interrupt",
-                "name": payload.get("type", "human_review"),
-                "data": {
-                    "current_solution": payload.get("current_solution", ""),
-                    "current_content": payload.get("current_content", ""),
-                    "revision_count": payload.get("revision_count", 0),
-                    "message": payload.get("message", ""),
-                },
+                "name": interrupt_type,
+                "data": data,
             }
 
         if name == "progress":
@@ -124,14 +134,16 @@ async def stream_session(
 
     inputs = {
         "document": document,
-        "draft_solution": "",
+        "tech_structure": "",
+        "solution": "",
+        "solutions_json": "",
+        "selected_index": -1,
         "current_solution": "",
         "user_intent": "",
         "user_feedback": "",
         "evaluation_report": "",
         "evaluation_passed": False,
         "rejection_reason": "",
-        "revised_solution": "",
         "revision_count": 0,
         "final_disclosure": "",
         "thread_id": thread_id,
