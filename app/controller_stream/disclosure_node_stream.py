@@ -1,9 +1,13 @@
 """
 流式交底书生成节点。
 与原版区别：使用 _llm.astream() 并 dispatch_custom_event 发送 token 事件。
+生成完成后保存 MD 文件并通过自定义事件通知前端。
 """
 
+from pathlib import Path
+
 from langchain_deepseek import ChatDeepSeek
+from langchain_core.callbacks import dispatch_custom_event
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,6 +18,8 @@ _llm = ChatDeepSeek(
     temperature=1,
 )
 
+OUTPUT_DIR = Path(__file__).resolve().parent.parent.parent / "files" / "disclosure_output"
+
 
 async def disclosure_node_stream(state: dict):
     """生成专利交底书（流式版本）。
@@ -21,9 +27,11 @@ async def disclosure_node_stream(state: dict):
     期望 state 中包含：
     - current_solution: 最终确认的技术方案
     - evaluation_report: 评估报告（可选）
+    - thread_id: 会话标识
     """
     solution = state.get("current_solution", "")
     report = state.get("evaluation_report", "")
+    thread_id = state.get("thread_id", "unknown")
 
     report_hint = ""
     if report:
@@ -48,4 +56,21 @@ async def disclosure_node_stream(state: dict):
         if content:
             chunks.append(content)
 
-    return {"final_disclosure": "".join(chunks)}
+    disclosure_text = "".join(chunks)
+
+    # 保存 MD 文件
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    md_path = OUTPUT_DIR / f"{thread_id}.md"
+    md_path.write_text(disclosure_text, encoding="utf-8")
+
+    # 通知前端交底书已保存
+    dispatch_custom_event(
+        "disclosure_done",
+        {
+            "file_path": str(md_path),
+            "file_name": f"{thread_id}.md",
+            "length": len(disclosure_text),
+        },
+    )
+
+    return {"final_disclosure": disclosure_text}

@@ -25,7 +25,8 @@ UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent.parent / "files"
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
-# MinerU 服务实例
+MINERU_OUTPUT_DIR = UPLOAD_DIR / "mineru_output"
+DISCLOSURE_OUTPUT_DIR = UPLOAD_DIR / "disclosure_output"
 _mineru = MinerUService()
 
 
@@ -134,6 +135,7 @@ async def parse_file(req: ParseRequest):
             file_path=req.file_path,
             filename=req.filename,
             model_version=req.model_version or "vlm",
+            thread_id=req.thread_id,
         ):
             if payload.get("type") == "heartbeat":
                 yield ": keepalive\n\n"
@@ -204,16 +206,30 @@ async def resume_stream_text(req: ResumeTextRequest):
 
 @router.post("/cleanup")
 async def cleanup_session(req: CleanupRequest):
-    """清理会话：删除上传的文件目录。"""
+    """清理会话：删除上传文件、MinerU 解析输出、交底书输出。"""
     thread_id = req.thread_id
-    # 只允许删除 files/stream-xxx 格式的目录，防止路径穿越
+    # 只允许删除 stream-xxx 格式，防止路径穿越
     if not thread_id.startswith("stream-"):
         raise HTTPException(status_code=400, detail="无效的 thread_id")
 
-    session_dir = UPLOAD_DIR / thread_id
-    deleted = False
-    if session_dir.is_dir():
-        shutil.rmtree(session_dir, ignore_errors=True)
-        deleted = True
+    cleaned = []
 
-    return {"thread_id": thread_id, "deleted": deleted}
+    # 1. 上传的原始文件: files/{thread_id}/
+    upload_dir = UPLOAD_DIR / thread_id
+    if upload_dir.is_dir():
+        shutil.rmtree(upload_dir, ignore_errors=True)
+        cleaned.append("upload")
+
+    # 2. MinerU 解析输出: files/mineru_output/{thread_id}/
+    mineru_dir = MINERU_OUTPUT_DIR / thread_id
+    if mineru_dir.is_dir():
+        shutil.rmtree(mineru_dir, ignore_errors=True)
+        cleaned.append("mineru_output")
+
+    # 3. 交底书输出: files/disclosure_output/{thread_id}.md
+    disclosure_file = DISCLOSURE_OUTPUT_DIR / f"{thread_id}.md"
+    if disclosure_file.is_file():
+        disclosure_file.unlink(missing_ok=True)
+        cleaned.append("disclosure_output")
+
+    return {"thread_id": thread_id, "cleaned": cleaned}

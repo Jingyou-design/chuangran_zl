@@ -95,6 +95,13 @@ def _format_event(event: dict) -> dict | None:
                 "data": payload,
             }
 
+        if name == "disclosure_done":
+            return {
+                "type": "disclosure_done",
+                "name": "disclosure",
+                "data": payload,
+            }
+
         return {"type": "custom", "name": name, "data": payload}
 
     # 其他事件（on_chat_model_start, on_chat_model_end, on_tool_start 等）暂不转发

@@ -1,8 +1,3 @@
-"""
-FastAPI 应用入口。
-挂载前端静态页面，启动时自动打开浏览器。
-"""
-
 import asyncio
 import webbrowser
 from contextlib import asynccontextmanager
