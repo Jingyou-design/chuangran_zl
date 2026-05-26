@@ -1,90 +1,87 @@
+#!/usr/bin/env python3
 """
-流式初稿生成子图。
-输入：document
-输出：tech_structure, solution
-extract 拆为 LLM + Review（用户确认/修改），generate 只有 LLM 节点，直接交给母图 evaluate_solutions 评估。
+Simple DeepAgents demo that loads the patenthub and x-class-doc skills.
 """
-from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
-from langgraph.types import interrupt
-from langchain_core.callbacks import dispatch_custom_event
-from langchain_deepseek import ChatDeepSeek
+
+import asyncio
+
 from dotenv import load_dotenv
+from pathlib import Path
+
+from langchain_deepseek import ChatDeepSeek
+from deepagents.graph import create_agent
+from deepagents.backends import LocalShellBackend
+from deepagents.middleware import FilesystemMiddleware, SkillsMiddleware
+from langchain.agents.middleware import TodoListMiddleware
+from langgraph.checkpoint.memory import MemorySaver
 
 load_dotenv()
 
+root_dir = Path(__file__).parent.absolute()
+skills_dir = root_dir / "skills"
 
-class DraftState(TypedDict):
-    document: str
-    tech_structure: str
-    solution: str
-
-
-_llm = ChatDeepSeek(
-    model="deepseek-v4-pro",
-    extra_body={"thinking": {"type": "disabled"}},
-    temperature=1,
-)
-
-
-# ---------- extract: LLM 提取 + 用户确认 ----------
-
-async def _extract_llm_node(state: DraftState):
-    """LLM 提取技术结构，不中断。"""
-    prompt = f"""请从以下文档中提取关键技术点或结构信息。主要技术特征,次要技术特征,只输出提取结果，不要有多余解释。
-
-                文档内容：
-                {state['document']}
-
-                提取的技术/结构："""
-    chunks = []
-    async for chunk in _llm.astream(prompt):
-        content = getattr(chunk, "content", str(chunk))
-        if content:
-            chunks.append(content)
-    return {"tech_structure": "".join(chunks)}
-
-
-async def _extract_review_node(state: DraftState):
-    """展示提取结果，让用户确认或修改。"""
-    tech_structure = state["tech_structure"]
-    dispatch_custom_event(
-        "interrupt",
-        {"type": "extract_review", "content": tech_structure, "message": "请确认或修改提取的技术结构"},
+def build_agent(model: str = "deepseek-chat"):
+    backend = LocalShellBackend(root_dir=root_dir, inherit_env=True, virtual_mode=False)
+    fs_middleware = FilesystemMiddleware(backend=backend)
+    skills_middleware = SkillsMiddleware(
+        backend=backend,
+        sources=[str(skills_dir)]
     )
-    decision = interrupt(
-        {"type": "extract_review", "content": tech_structure, "message": "请确认或修改提取的技术结构"},
+
+    checkpointer = MemorySaver()
+
+    agent = create_agent(
+        model=ChatDeepSeek(model="deepseek-v4-pro", extra_body={"thinking": {"type": "disabled"}}),
+        system_prompt="""您是一位乐于助人的专利研究助理。
+                        您能够使用文件系统工具（读取文件、写入文件、列出文件、通配符匹配、查找）和执行 shell 命令，此外还具备以下技能：
+                        - 专利中心：通过 PatentHub API 搜索专利、获取专利信息以及查询法律状态。
+                        - 国际专利分类搜索：从本地的 IPC 2026.01 树中查询国际专利分类号、层级结构和定义。
+                        - 专利审查搜索：进行系统的专利审查搜索以评估新颖性和创造性步骤，并对检索到的文件进行分类（X、Y、A、E 等）。
+                        当用户询问专利检索、专利详情或法律状态时，请使用 patenthub 技能。
+                        当用户询问国际专利分类（IPC）分类、IPC 代码或技术主题与 IPC 符号的映射时，请使用 ipc-search 技能，访问 skills/ipc-search/references/IPC_Tree/。
+                        当用户询问审查检索、新颖性评估、创造性步骤评估、现有技术策略或 X/Y 类文献检索时，请使用专利审查检索技能。
+                        始终要简洁明了、条理清晰地回答问题。
+                        重要提示：使用 glob 工具时，pattern 必须是相对路径（如 **/*.json），切勿使用绝对路径。
+                        """,
+        middleware=[fs_middleware, skills_middleware, TodoListMiddleware()],
+        checkpointer=checkpointer,
+        name="patent-research-agent",
     )
-    if decision.get("feedback", "").strip():
-        tech_structure = decision["feedback"].strip()
-    return {"tech_structure": tech_structure}
+    return agent
 
 
-# ---------- generate: LLM 生成（直接交给母图 evaluate_solutions） ----------
+async def main():
+    agent = build_agent()
+    thread_id = "demo-thread-001"
+    config = {"configurable": {"thread_id": thread_id}}
 
-async def _generate_llm_node(state: DraftState):
-    """LLM 生成技术方案，不中断。只用 tech_structure，不用 document。"""
-    prompt = f"""你是一个专利工程师。请基于以下技术结构生成多个技术方案，方案必须紧扣这些技术特征，不要引入未列出的特征，只描述核心发明点和关键实现方式。
+    print("=" * 60)
+    print("Patent Research Agent Demo")
+    print("Type 'exit' or 'quit' to stop.")
+    print("=" * 60)
 
-            技术结构：
-            {state['tech_structure']}
+    while True:
+        user_input = input("\nUser: ").strip()
+        if not user_input:
+            continue
+        if user_input.lower() in ("exit", "quit"):
+            print("Goodbye!")
+            break
 
-            方案："""
-    chunks = []
-    async for chunk in _llm.astream(prompt):
-        content = getattr(chunk, "content", str(chunk))
-        if content:
-            chunks.append(content)
-    return {"solution": "".join(chunks)}
+        result = await agent.ainvoke(
+            {"messages": [{"role": "user", "content": user_input}]},
+            config=config,
+        )
+
+        # Extract the last assistant message
+        messages = result.get("messages", [])
+        assistant_msgs = [m for m in messages if getattr(m, "type", None) == "ai"]
+        if assistant_msgs:
+            content = getattr(assistant_msgs[-1], "content", str(assistant_msgs[-1]))
+            print(f"\nAgent: {content}")
+        else:
+            print(f"\nAgent: {result}")
 
 
-def build_draft_workflow_stream():
-    builder = StateGraph(DraftState)
-    builder.add_node("extract_llm", _extract_llm_node)
-    builder.add_node("extract_review", _extract_review_node)
-    builder.add_node("generate_llm", _generate_llm_node)
-    builder.add_edge(START, "extract_llm")
-    builder.add_edge("extract_llm", "extract_review")
-    builder.add_edge("extract_review", "generate_llm")
-    builder.add_edge("generate_llm", END)
-    return builder.compile()
+if __name__ == "__main__":
+    asyncio.run(main())

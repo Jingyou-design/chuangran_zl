@@ -1,10 +1,10 @@
 """
 多方案评估节点。
-解析 generate_llm 输出的 N 个方案，并行调用 demo_agent 评估，
-汇总结果存入 solutions_json。
+解析 generate_llm 输出的 N 个方案，交由主编排 agent 统一评估，
+主编排 agent 拆分方案后逐个调用子agent（demo_agent）评估，最后汇总输出。
+结果存入 solutions_json。
 """
 
-import asyncio
 import json
 import re
 import sys
@@ -12,119 +12,123 @@ from pathlib import Path
 
 from langchain_core.callbacks import dispatch_custom_event
 
-# 确保项目根目录在路径中，以便复用 demo_agent.py 的 build_agent
+# 确保项目根目录在路径中
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from demo_agent import build_agent as build_eval_agent
+from app.controller_stream.main_eval_agent import build_main_eval_agent
 from app.controller.report_parser import parse_evaluation_report
 
 
-def parse_solutions(text: str) -> list[str]:
-    """按 ### / ## 方案标题拆分 LLM 输出为多个方案。
+def parse_solutions(text: str) -> list[dict]:
+    """从 generate_llm 输出中解析方案列表。
 
-    支持 "### 方案1"、"## 方案一"、"### 方案 1" 等格式。
-    如果没有标题分割，则整体作为一个方案返回。
+    优先尝试 JSON 数组格式：[{"title": "方案1", "content": "..."}, ...]
+    Fallback: 按 ### / ## 方案标题拆分（兼容旧格式）。
     """
-    # 用 finditer 找到所有标题位置，按位置截取内容
+    text = text.strip()
+
+    # 尝试 JSON 解析
+    try:
+        obj = json.loads(text)
+        if isinstance(obj, list):
+            solutions = []
+            for item in obj:
+                if isinstance(item, dict) and "content" in item:
+                    solutions.append({
+                        "title": item.get("title", ""),
+                        "content": item["content"],
+                    })
+                elif isinstance(item, str):
+                    solutions.append({"title": "", "content": item})
+            if solutions:
+                return solutions
+    except json.JSONDecodeError:
+        pass
+
+    # Fallback: 按 ### / ## 方案标题拆分
     headers = list(re.finditer(r"(?:###|##)\s*方案\s*\d*[：:]*", text))
+    if headers:
+        solutions = []
+        for i, header in enumerate(headers):
+            start = header.end()
+            end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
+            content = text[start:end].strip()
+            if content:
+                solutions.append({"title": f"方案{i + 1}", "content": content})
+        if solutions:
+            return solutions
 
-    if not headers:
-        return [text.strip()] if text.strip() else []
-
-    solutions = []
-    for i, header in enumerate(headers):
-        # 内容从标题结束位置开始，到下一个标题开始位置结束
-        start = header.end()
-        end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
-        content = text[start:end].strip()
-        if content:
-            solutions.append(content)
-
-    # 如果截取结果只有0个，整体作为一个方案
-    if not solutions:
-        return [text.strip()] if text.strip() else []
-
-    return solutions
+    # 兜底：整体作为一个方案
+    if text:
+        return [{"title": "方案1", "content": text}]
+    return []
 
 
 async def evaluate_solutions_node(state: dict):
-    """解析 N 个方案，并行调用 demo_agent 评估，返回汇总结果。
+    """解析 N 个方案，交由主编排 agent 评估，返回汇总结果。
 
     期望 state 中包含：
-    - solution: generate_llm 输出的原始方案文本
+    - solution: generate_llm 输出（JSON 数组或 Markdown 文本）
     - thread_id: 用于评估会话隔离
 
     输出：
-    - solutions_json: JSON 字符串，每个方案包含 content/report/passed/reason
+    - solutions_json: JSON 字符串，每个方案包含 title/content/report/passed/reason
     """
     raw_solution = state.get("solution", "")
     thread_id = state.get("thread_id", "default-thread")
-    eval_thread_id = f"{thread_id}-eval"
 
     solutions = parse_solutions(raw_solution)
 
     if not solutions:
-        # 兜底：至少有一个空方案
-        solutions = [raw_solution or "无方案"]
+        solutions = [{"title": "方案1", "content": raw_solution or "无方案"}]
 
     dispatch_custom_event(
         "progress",
         {"node": "evaluate_solutions", "status": "started", "count": len(solutions)},
     )
 
-    async def _evaluate_one(i: int, sol: str) -> dict:
-        """评估单个方案。"""
-        dispatch_custom_event(
-            "progress",
-            {"node": "evaluate_solutions", "status": "evaluating", "index": i, "total": len(solutions)},
-        )
+    # 调用主编排 agent，传入 JSON 格式的方案列表
+    solutions_input = json.dumps(solutions, ensure_ascii=False)
+    prompt = f"请评估以下{len(solutions)}个技术方案，方案数据如下：\n{solutions_input}"
 
-        agent = build_eval_agent()
-        config = {"configurable": {"thread_id": f"{eval_thread_id}-{i}"}}
+    # 调用主编排 agent
+    agent = build_main_eval_agent()
+    config = {"configurable": {"thread_id": f"{thread_id}-main-eval"}}
 
-        eval_prompt = f"""请对以下技术方案进行专利审查检索和新颖性/创造性评估。
-                    请使用 patenthub 技能进行现有技术检索，使用专利审查检索技能评估 X/Y 类文献。
+    result = await agent.ainvoke(
+        {"messages": [{"role": "user", "content": prompt}]},
+        config=config,
+    )
 
-                    待评估方案：
-                    {sol}
+    # 从 tool 返回中提取评估报告（evaluate_all_solutions 一次返回所有结果）
+    messages = result.get("messages", [])
+    tool_messages = [m for m in messages if getattr(m, "type", None) == "tool"]
 
-                    请输出：
-                    1) 检索策略；
-                    2) 对比文件列表；
-                    3) 新颖性结论；
-                    4) 创造性结论。
+    eval_reports = []
+    if tool_messages:
+        tool_content = getattr(tool_messages[0], "content", "")
+        try:
+            eval_reports = json.loads(tool_content)
+        except json.JSONDecodeError:
+            eval_reports = []
 
-                    最后请明确给出：【评估结果：通过 / 不通过】，如果不通过请说明具体原因及改进方向。
-                    """
-
-        result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": eval_prompt}]},
-            config=config,
-        )
-
-        # 提取评估Agent的回复
-        messages = result.get("messages", [])
-        assistant_msgs = [m for m in messages if getattr(m, "type", None) == "ai"]
+    results = []
+    for i, sol in enumerate(solutions):
         report = ""
-        if assistant_msgs:
-            report = getattr(assistant_msgs[-1], "content", str(assistant_msgs[-1]))
-        else:
-            report = str(result)
+        if i < len(eval_reports) and isinstance(eval_reports[i], dict):
+            report = eval_reports[i].get("report", "")
 
-        # 解析结构化结果
         parsed = await parse_evaluation_report(report)
 
-        return {
-            "content": sol,
+        results.append({
+            "title": sol.get("title", f"方案{i + 1}"),
+            "content": sol.get("content", ""),
             "report": report,
             "passed": parsed.get("passed", False),
             "reason": parsed.get("rejection_reason", ""),
-        }
-
-    # 并行评估所有方案
-    results = await asyncio.gather(*[_evaluate_one(i, sol) for i, sol in enumerate(solutions)])
+        })
 
     dispatch_custom_event(
         "progress",

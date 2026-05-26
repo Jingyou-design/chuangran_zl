@@ -604,9 +604,10 @@
                 solutions.forEach((sol, i) => {
                     const icon = sol.passed ? '✅' : '❌';
                     const status = sol.passed ? '评估通过' : '评估不通过';
+                    const title = sol.title || ('方案' + (i+1));
                     const preview = (sol.content || '').substring(0, 120);
                     html += '<div style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px;">';
-                    html += '<div style="font-weight:500;margin-bottom:4px;">方案' + (i+1) + ' ' + icon + ' ' + status + '</div>';
+                    html += '<div style="font-weight:500;margin-bottom:4px;">' + title + ' ' + icon + ' ' + status + '</div>';
                     html += '<div style="font-size:12px;color:#666;margin-bottom:8px;">' + preview + (sol.content && sol.content.length > 120 ? '...' : '') + '</div>';
                     html += '<button class="btn btn-success" style="font-size:12px;padding:6px 14px;" onclick="resumeWithIndex(\'disclosure\',' + i + ')">📄 生成交底书</button>';
                     html += '<button class="btn btn-warning" style="font-size:12px;padding:6px 14px;" onclick="resumeWithIndex(\'revise\',' + i + ')">🔄 改进</button>';
@@ -616,8 +617,11 @@
                 els.solutionPreview.style.display = 'block';
                 els.solutionPreview.style.whiteSpace = 'normal';
                 els.solutionPreview.style.maxHeight = 'none';
-                els.actionButtons.innerHTML = '';
-                els.interruptMessage.textContent = data.message || '请选择一个方案进行下一步操作';
+                els.actionButtons.innerHTML = '<button class="btn btn-info" onclick="resume(\'regenerate\')" style="margin-top:8px;">🔄 重新生成方案</button> <button class="btn btn-primary" onclick="resumeChat()" style="margin-top:8px;">💬 发送</button>';
+                els.feedbackInput.placeholder = '或输入您的需求，如"重新生成三个方案"、"选方案2生成交底书"';
+                els.feedbackInput.style.display = 'block';
+                els.feedbackInput.style.minHeight = '50px';
+                els.interruptMessage.textContent = data.message || '请选择一个方案进行下一步操作，或输入您的需求';
             } else if (interruptName === 'single_review') {
                 // 单方案评估结果（revise后）
                 const passed = data.evaluation_passed;
@@ -639,13 +643,51 @@
                 els.actionButtons.innerHTML = '';
                 els.interruptMessage.textContent = data.message || '';
             } else if (interruptName === 'extract_review') {
-                els.solutionPreview.textContent = data.current_content || data.current_solution || '暂无内容';
+                // 尝试 JSON 格式展示
+                let content = data.current_content || data.current_solution || '暂无内容';
+                let displayHtml = '';
+                try {
+                    const parsed = JSON.parse(content);
+                    if (parsed.tech_features || parsed.auxiliary_features) {
+                        if (parsed.tech_features && parsed.tech_features.length) {
+                            displayHtml += '<div style="font-weight:500;margin-bottom:4px;">核心技术特征</div>';
+                            displayHtml += '<ul style="margin:0 0 8px 16px;font-size:13px;">';
+                            parsed.tech_features.forEach(f => { displayHtml += '<li>' + f + '</li>'; });
+                            displayHtml += '</ul>';
+                        }
+                        if (parsed.auxiliary_features && parsed.auxiliary_features.length) {
+                            displayHtml += '<div style="font-weight:500;margin-bottom:4px;">辅助技术特征</div>';
+                            displayHtml += '<ul style="margin:0 0 8px 16px;font-size:13px;">';
+                            parsed.auxiliary_features.forEach(f => { displayHtml += '<li>' + f + '</li>'; });
+                            displayHtml += '</ul>';
+                        }
+                    } else if (parsed.main_features || parsed.sub_features) {
+                        // 兼容旧格式
+                        if (parsed.main_features) {
+                            displayHtml += '<div style="font-weight:500;margin-bottom:4px;">主要技术特征</div>';
+                            displayHtml += '<ul style="margin:0 0 8px 16px;font-size:13px;">';
+                            parsed.main_features.forEach(f => { displayHtml += '<li>' + f + '</li>'; });
+                            displayHtml += '</ul>';
+                        }
+                        if (parsed.sub_features) {
+                            displayHtml += '<div style="font-weight:500;margin-bottom:4px;">次要技术特征</div>';
+                            displayHtml += '<ul style="margin:0 0 8px 16px;font-size:13px;">';
+                            parsed.sub_features.forEach(f => { displayHtml += '<li>' + f + '</li>'; });
+                            displayHtml += '</ul>';
+                        }
+                    } else {
+                        displayHtml = '<pre style="margin:0;font-size:13px;">' + JSON.stringify(parsed, null, 2) + '</pre>';
+                    }
+                } catch(e) {
+                    displayHtml = content;
+                }
+                els.solutionPreview.innerHTML = displayHtml;
                 els.solutionPreview.style.display = 'block';
-                els.solutionPreview.style.whiteSpace = 'pre-wrap';
-                els.solutionPreview.style.maxHeight = '200px';
+                els.solutionPreview.style.whiteSpace = 'normal';
+                els.solutionPreview.style.maxHeight = '300px';
                 els.actionButtons.innerHTML = '<button class="btn btn-success" onclick="resume(\'confirm\')">📤 提交</button>';
-                els.feedbackInput.value = data.current_content || '';
-                els.feedbackInput.placeholder = '直接编辑上方内容后提交，或不修改直接提交';
+                els.feedbackInput.value = content;
+                els.feedbackInput.placeholder = '直接编辑 JSON 后提交，或不修改直接提交';
                 els.interruptMessage.textContent = data.message || '';
             } else {
                 els.solutionPreview.textContent = data.current_solution || data.current_content || '暂无方案';
@@ -818,6 +860,39 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ thread_id: threadId, intent, feedback, selected_index: -1 }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+
+                await readSSE(response, handleEvent);
+
+                if (isRunning) {
+                    setStatus('运行完成', 'idle');
+                    isRunning = false;
+                }
+            } catch (err) {
+                logMeta('❌ 请求失败: ' + err.message);
+                setStatus('请求失败', 'error');
+                isRunning = false;
+            }
+        }
+
+        async function resumeChat() {
+            if (!threadId) { alert('会话未启动'); return; }
+            const feedback = els.feedbackInput.value.trim();
+            if (!feedback) { alert('请输入您的需求'); return; }
+
+            hideInterrupt();
+            isRunning = true;
+            setStatus('正在理解您的需求...', 'active');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/stream/resume`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thread_id: threadId, intent: 'chat', feedback, selected_index: -1 }),
                 });
 
                 if (!response.ok) {

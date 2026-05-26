@@ -14,7 +14,6 @@ from langgraph.types import Command
 from langgraph.checkpoint.memory import MemorySaver
 
 from app.controller_stream.master_graph_stream import build_master_graph_stream
-from app.controller.intent_parser import parse_intent
 
 
 # 模块级别复用同一个 checkpointer，确保 start / resume 共享状态
@@ -190,18 +189,3 @@ async def resume_session(
         if formatted is not None:
             yield formatted
 
-
-# ---------- 便捷函数：自然语言决策解析 + 恢复 ----------
-
-async def resume_session_with_text(
-    thread_id: str,
-    user_input: str,
-) -> AsyncGenerator[dict, None]:
-    """先用 intent_parser 解析自然语言，再恢复会话。"""
-    parsed = await parse_intent(user_input)
-    decision = {
-        "intent": parsed["intent"],
-        "feedback": parsed["feedback"],
-    }
-    async for payload in resume_session(thread_id, decision):
-        yield payload
