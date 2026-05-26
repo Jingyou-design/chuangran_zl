@@ -44,11 +44,6 @@ class ResumeRequest(BaseModel):
     selected_index: Optional[int] = -1
 
 
-# class ResumeTextRequest(BaseModel):
-#     thread_id: str
-#     user_input: str
-
-
 class ParseRequest(BaseModel):
     thread_id: str
     file_path: str
