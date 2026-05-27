@@ -75,23 +75,21 @@ async def _parse_user_intent(user_input: str, solution_count: int) -> dict:
     """
     prompt = f"""你是意图解析助手。当前有{solution_count}个技术方案已评估完毕，用户正在查看评估结果。
 
-            用户输入：{user_input}
-            
-            请解析用户意图，严格以以下 JSON 格式输出（不要加 markdown 代码块标记）：
-            {{
-              "intent": "disclosure" | "revise" | "regenerate",
-              "selected_index": 方案索引（0-based，-1表示未指定）,
-              "feedback": "用户反馈内容摘要"
-            }}
+用户输入：{user_input}
 
-            规则：
-            - intent="disclosure"：用户想基于某个方案生成交底书（如"选方案2生成交底书"、"方案1出交底书"）
-            - intent="revise"：用户想改进某个方案（如"改进方案1"、"方案3再优化"）
-            - intent="regenerate"：用户想重新生成所有方案（如"重新生成"、"再来三个方案"、"换一批方案"）
-            - selected_index：如果用户明确指定了方案编号，转为0-based索引（方案1→0, 方案2→1）；未指定则填-1
-            - feedback：提取用户的具体反馈或需求"""
+请解析用户意图，严格以以下 JSON 格式输出（不要加 markdown 代码块标记）：
+{{
+  "intent": "disclosure" | "revise" | "regenerate",
+  "selected_index": 方案索引（0-based，-1表示未指定）,
+  "feedback": "用户反馈内容摘要"
+}}
 
-
+规则：
+- intent="disclosure"：用户想基于某个方案生成交底书（如"选方案2生成交底书"、"方案1出交底书"）
+- intent="revise"：用户想改进某个方案（如"改进方案1"、"方案3再优化"）
+- intent="regenerate"：用户想重新生成所有方案（如"重新生成"、"再来三个方案"、"换一批方案"）
+- selected_index：如果用户明确指定了方案编号，转为0-based索引（方案1→0, 方案2→1）；未指定则填-1
+- feedback：提取用户的具体反馈或需求"""
     response = _intent_llm.invoke(prompt)
     content = response.content.strip()
     if content.startswith("```"):

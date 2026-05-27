@@ -44,6 +44,11 @@ class ResumeRequest(BaseModel):
     selected_index: Optional[int] = -1
 
 
+# class ResumeTextRequest(BaseModel):
+#     thread_id: str
+#     user_input: str
+
+
 class ParseRequest(BaseModel):
     thread_id: str
     file_path: str
@@ -190,7 +195,16 @@ async def resume_stream(req: ResumeRequest):
     )
 
 
-
+# @router.post("/resume-text")
+# async def resume_stream_text(req: ResumeTextRequest):
+#     """恢复会话（自然语言版本）。"""
+#     if not req.thread_id:
+#         raise HTTPException(status_code=400, detail="thread_id is required")
+#
+#     return StreamingResponse(
+#         _sse_generator(resume_session_with_text(req.thread_id, req.user_input)),
+#         media_type="text/event-stream",
+#     )
 
 
 # ---------- 清理端点 ----------
