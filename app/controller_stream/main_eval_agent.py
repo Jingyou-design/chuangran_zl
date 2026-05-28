@@ -12,7 +12,7 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 from langchain_deepseek import ChatDeepSeek
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langgraph.checkpoint.memory import MemorySaver
 from dotenv import load_dotenv
 
@@ -122,10 +122,10 @@ def build_main_eval_agent():
 
     checkpointer = MemorySaver()
 
-    agent = create_react_agent(
+    agent = create_agent(
         llm,
         tools=[evaluate_all_solutions],
-        prompt=system_prompt,
+        system_prompt=system_prompt,
         checkpointer=checkpointer,
         name="main-eval-agent",
     )
